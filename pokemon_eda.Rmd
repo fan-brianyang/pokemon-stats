@@ -1,0 +1,104 @@
+---
+title: "Pokemon EDA"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r libraries, warning=F, message=F}
+
+if (!require(pacman)){
+  install.packages("pacman")
+  library(pacman)
+}
+
+p_load(httr, jsonlite, rvest, 
+       xml2, readr, here, diffdf,
+       tidyr, ggplot2, dplyr, tibble)
+
+WD <- getwd()
+.pokepath <- "/Data_Projects/pokedata/pokemon.csv"
+pokedata <- read_csv(paste0(WD, .pokepath))
+```
+
+```{r JSON, warning=FALSE, include=F}
+
+# The response 'res' an object obtained by using the GET function on a link.
+# res <- GET("https://pokemondb.net/pokedex/all")
+# pokedex <- fromJSON(rawToChar(res$content))
+
+
+# NOTE: WEBSITE DOES NOT HAVE AN API (JSON).
+# PIVOT TO USING HTML WEB SCRAPING.
+```
+
+Initial findings show that [PokemonDB.net](https://pokemondb.net/pokedex/all) does not have an API we can use to extract data in JSON format; one thing to note is that the the site displays a table of all the Pokemon, with important data points such as ID, name, typing, and its in-game stats. Because the website has a formatted table, the *Inspect Element* tool that most browsers have came in handy, where I was able to determine the HTML node that contains the table with the desired data.
+
+```{r HTML}
+pdex <- read_html("https://pokemondb.net/pokedex/all")
+pdex <- pdex %>% 
+  html_node("table") %>% 
+  html_table(fill = T)
+
+write_csv(pdex, "pokedex.csv")
+
+# IDEA: This dataset does not indicate legendary status.
+# BUT: We DO have a dataset with many of the same pokemon with Legendaries.
+```
+
+The data I scraped from the website has a few things that I needed to adjust for analysis:
+
+-   The Type variable contains both a Primary and a Secondary type of a Pokemon. While some Pokemon do not have a secondary typing, we need to split the column into two columns as distinct Types.
+
+-   The columns containing different stats have special characters such as '.' and spaces, which we will need to rename. Basic tidying work, but it is simple and helps reduce future keystrokes.
+
+-   The ID numbers are identical for Pokemon with multiple forms (e.g., mega-evolutions, regional variants, environmental forms). We will need to assign each Pokemon with unique ID / primary key. Note: The PokeDex number is the same regardless of form.
+
+-   Certain Pokemon have multiple forms, as mentioned above regarding the ID numbers, as such we need to account for distinct form (e.g., mega-evolutions, regional variants, etc.). I use basic regular expression matching to determine where in the Name string to split the columns by.
+
+```{r wrangling}
+
+# for the separation, the look-behind (?<=[a-z]) matches all lowercase ...
+# then (?=[A-Z]) is the look-ahead that matches all uppercase ...
+
+pdex <- pdex %>% 
+  as_tibble() %>% 
+  separate(Type, into = c("PrimaryType", "SecondaryType"),
+           sep = "(?<=[a-z]|[15]0)(?=[15A-Z])", fill = "right") %>% 
+  separate(Name, into = c("Name", "Form"),
+           sep = "(?<=[a-z])(?=[A-Z])", fill = "right") %>%
+  rename(DexNo = `#`, Att = Attack, Def = Defense, 
+         SpAtt = `Sp. Atk`, SpDef = `Sp. Def`, Spd = Speed) %>% 
+  mutate(ID = seq(1:nrow(pdex))) %>% 
+  mutate(Form = replace_na(Form, "Base")) %>% 
+  select(ID, DexNo:Spd) 
+
+
+pdex[sample(nrow(pdex), 15),]
+```
+
+Side Note: Honestly, these functions by themselves are neither difficult nor complex by themselves, it just looks more complicated because it is chained together, making it look more complicated than it actually is. I only chained the functions together to save myself some screen space.
+
+> Personal Comments: Figuring out the separation regular expression, *sep = "(?\<=[a-z]\|[15]0)(?=[15A-Z])"*, took a lot of trial and error -- took a solid 30 minutes to find something that reliably works. Typically, you would be able to separate using the regular expression (regex) used for separating *Name* and *Form*, but because of the fact that Zygarde had a *10% Forme* and a *50% Forme*, coupled with *Porygon2* being a distinct Pokemon, you can't simply just include a **[0-9]** match for the look-behind or the look-ahead. Unfortunately, this meant that I had to hard-code **\|[15]0** and **15** into the look-behind and look-ahead regex.
+>
+> Of course, this means that this regex would absolutely fail if GameFreak decided to add Pokemon forms that had the specific number '2', similar to how *Porygon2* is named. Sure, I could have just manually edited the data, but that would be no fun and practicing regex is probably important.
+
+Below is a comparison of the two different data sets that I will be using. The first is *pdex*, which is the set that we extracted from the PokemonDB website, the second is *pokedata*, which is the set that was downloaded from Kaggle. The primary differences one will note are:
+
+-   Set *pdex* is a comprehensive list of all existing Pokemon, ranging from Generation 1 through 8, whereas set *pokedata* is a list of Pokemon from Generation 1 through 6.
+
+-   Notably, *pokedata* contains information not in *pdex*. For example, *pokedata* specifies the Generation that a Pokemon debuted in, as well as a True/False indicator regarding a Pokemon's Legendary status.
+
+Before true comparisons are made, it is important that we make sure the formats of both datasets are consistent with each other, else the comparisons won't be as meaningful.
+
+```{r comparisons}
+
+pokedata <- pokedata %>% 
+  as_tibble() %>% 
+  rename(ID = `#`, PrimaryType = `Type 1`,SecondaryType = `Type 2`, 
+                    Att = Attack, Def = Defense, 
+                    SpAtt = `Sp. Atk`, SpDef = `Sp. Def`, Spd = Speed)
+```
