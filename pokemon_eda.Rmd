@@ -100,9 +100,15 @@ General notes on scraping method:
   .gen2All <- .gen_list %>% 
     .[[3]] %>% .[, -3]
 
-
 # .gen_list %>% .[[2:10]] %>% View()
 # .gen_list_clean <- .gen_list[[2:10]]
+
+  
+.pdex %>% 
+  html_node("table") %>% 
+  html_table(fill = T)
+
+.gen_list_clean <- .gen_list$.[[2:10]]
   
 //*[@id="mw-content-text"]/table[2]
 //*[@id="mw-content-text"]/table[3]
