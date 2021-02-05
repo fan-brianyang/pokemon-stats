@@ -8,7 +8,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r libraries, warning=F, message=F}
+```{r Importing Libraries and Data, warning=F, message=F}
 
 if (!require(pacman)){
   install.packages("pacman")
@@ -35,14 +35,31 @@ pokedata <- read_csv("pokedata/pokemon.csv")
 
 Initial findings show that [PokemonDB.net](https://pokemondb.net/pokedex/all) does not have an API we can use to extract data in JSON format; one thing to note is that the the site displays a table of all the Pokemon, with important data points such as ID, name, typing, and its in-game stats. Because the website has a formatted table, the *Inspect Element* tool that most browsers have came in handy, where I was able to determine the HTML node that contains the table with the desired data.
 
-```{r HTML}
+```{r Webscraping Data with HTML}
 .pdex <- read_html("https://pokemondb.net/pokedex/all")
 .pdex <- .pdex %>% 
   html_node("table") %>% 
   html_table(fill = T)
 
-# IDEA: This dataset does not indicate legendary status.
-# BUT: We DO have a dataset with many of the same pokemon with Legendaries.
+megatest <- read_html("https://bulbapedia.bulbagarden.net/wiki/Mega_Evolution")
+
+gen6Megas <- megatest %>% 
+  html_nodes(xpath = ".//table[contains(@class, 'roundy')]") %>% 
+  html_table(fill = T) %>% 
+  .[[1]] %>% 
+  .[-1, c(-2, -5)] # remove row 1 - extraneous text | remove col 2 and 5 - images
+
+gen7Megas <- megatest %>% 
+  html_nodes(xpath = ".//table[contains(@class, 'roundy')]") %>% 
+  html_table(fill = T) %>% 
+  .[[2]] %>% 
+  .[-1, c(-2, -5)] # remove row 1 - extraneous text | remove col 2 and 5 - images
+
+
+megatest[1]
+
+
+
 ```
 
 The data I scraped from the website has a few things that I needed to adjust for analysis:
@@ -55,7 +72,9 @@ The data I scraped from the website has a few things that I needed to adjust for
 
 -   Certain Pokemon have multiple forms, as mentioned above regarding the ID numbers, as such we need to account for distinct form (e.g., mega-evolutions, regional variants, etc.). I use basic regular expression matching to determine where in the Name string to split the columns by.
 
-```{r wrangling}
+-   Less important, but I made *.pdex* a variable by itself in case I have to rerun the wrangling code to make any quick adjustments. This way, I won't get an error since the wrangled data gets written into a new variable.
+
+```{r Cleaning and Wrangling the Pokedex Dataset}
 
 # for the separation, the look-behind (?<=[a-z]) matches all lowercase ...
 # then (?=[A-Z]) is the look-ahead that matches all uppercase ...
@@ -63,22 +82,31 @@ The data I scraped from the website has a few things that I needed to adjust for
 pokedex <- .pdex %>% 
   as_tibble() %>% 
   separate(Type, into = c("PrimaryType", "SecondaryType"),
-           sep = "(?<=[a-z]|[15]0)(?=[15A-Z])", fill = "right") %>% 
+           sep = "(?<=[a-z])(?=[A-Z])", fill = "right") %>% 
   separate(Name, into = c("Name", "Form"),
-           sep = "(?<=[a-z])(?=[A-Z])", fill = "right") %>%
+           sep = "(?<=[a-z]|[15]0)(?=[15A-Z])", fill = "right") %>%
   rename(DexNo = `#`, Att = Attack, Def = Defense, 
          SpAtt = `Sp. Atk`, SpDef = `Sp. Def`, Spd = Speed) %>% 
-  mutate(ID = seq(1:nrow(pdex))) %>% 
+  mutate(ID = seq(1:nrow(.pdex))) %>% 
   mutate(Form = replace_na(Form, "Base")) %>% 
   select(ID, DexNo:Spd) 
 
+pokedex %>% 
+  mutate(Generation = case_when(
+    grepl("Alola", Form) ~ 7,
+    grepl("Galar", Form) ~ 8,
+    
+  )) %>% View()
+
+gen6Mega <- c("Venasaur", "Charizard", "Blastoise", "Alakazam", )
+gen7Mega <- c("",)
 
 pokedex[sample(nrow(pokedex), 15),]
 ```
 
 Side Note: Honestly, these functions by themselves are neither difficult nor complex by themselves, it just looks more complicated because it is chained together, making it look more complicated than it actually is. I only chained the functions together to save myself some screen space.
 
-> Personal Comments: Figuring out the separation regular expression, *sep = "(?\<=[a-z]\|[15]0)(?=[15A-Z])"*, took a lot of trial and error -- took a solid 30 minutes to find something that reliably works. Typically, you would be able to separate using the regular expression (regex) used for separating *Name* and *Form*, but because of the fact that Zygarde had a *10% Forme* and a *50% Forme*, coupled with *Porygon2* being a distinct Pokemon, you can't simply just include a **[0-9]** match for the look-behind or the look-ahead. Unfortunately, this meant that I had to hard-code **\|[15]0** and **15** into the look-behind and look-ahead.
+> Personal Comments: Figuring out the separation regular expression, *sep = "(?\<=[a-z]\|[15]0)(?=[15A-Z])"*, took a lot of trial and error --- solid 30 minutes to find something that reliably works. Typically, you would be able to separate using the regular expression (regex) used for separating *Name* and *Form*, but because of the fact that Zygarde had a *10% Forme* and a *50% Forme*, coupled with *Porygon2* being a distinct Pokemon, you can't simply just include a **[0-9]** match for the look-behind or the look-ahead. Unfortunately, this meant that I had to hard-code **\|[15]0** and **15** into the look-behind and look-ahead.
 >
 > Of course, this means that this regex would absolutely fail if GameFreak decided to add Pokemon forms that had the specific number '2', similar to how *Porygon2* is named. Sure, I could have just manually edited the data, but that would be no fun and practicing regex is probably important.
 
@@ -90,11 +118,20 @@ Below is a comparison of the two different data sets that I will be using. The f
 
 Before true comparisons are made, it is important that we make sure the formats of both datasets are consistent with each other, else the comparisons won't be as meaningful.
 
-```{r comparisons}
+```{r Cleaning and Wrangling the Pokedata Dataset}
 
 pokedata <- pokedata %>% 
   as_tibble() %>% 
   rename(ID = `#`, PrimaryType = `Type 1`,SecondaryType = `Type 2`, 
                     Att = Attack, Def = Defense, 
-                    SpAtt = `Sp. Atk`, SpDef = `Sp. Def`, Spd = Speed)
+                    SpAtt = `Sp. Atk`, SpDef = `Sp. Def`, Spd = Speed) %>% 
+  mutate(Total = (HP + Att + Def + SpAtt + SpDef + Spd)) %>% 
+  select(ID:SecondaryType, Total, HP:Legendary)
+
+
+```
+
+```{r}
+
+
 ```
