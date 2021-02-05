@@ -35,49 +35,56 @@ pokedata <- read_csv("pokedata/pokemon.csv")
 
 Initial findings show that [PokemonDB.net](https://pokemondb.net/pokedex/all) does not have an API we can use to extract data in JSON format; one thing to note is that the the site displays a table of all the Pokemon, with important data points such as ID, name, typing, and its in-game stats. Because the website has a formatted table, the *Inspect Element* tool that most browsers have came in handy, where I was able to determine the HTML node that contains the table with the desired data.
 
+-   I made the scraped data variables hidden in case I have to rerun the wrangling code while making any quick adjustments. This way, I won't get an error since the wrangled data gets written into a new variable.
+
+As I worked through the data cleaning and wrangling steps, I realized that I could actually compile a dataset that included more information such as which Generation a Pokemon was introduced in, and whether or not the Pokemon was a Legendary. To accomplish this, I had to scrape some more data from other websites, to which [Bulbapedia](https://bulbapedia.bulbagarden.net) came to mind first, as it was a resource that I commonly used when I play through the mainline games.
+
+-   
+
 ```{r Webscraping Data with HTML}
 .pdex <- read_html("https://pokemondb.net/pokedex/all")
+
+.megatest <- read_html("https://bulbapedia.bulbagarden.net/wiki/Mega_Evolution")
+
+.natdex <- read_html("https://bulbapedia.bulbagarden.net/wiki/List_of_Pokémon_by_National_Pokédex_number")
+
 .pdex <- .pdex %>% 
   html_node("table") %>% 
   html_table(fill = T)
 
-megatest <- read_html("https://bulbapedia.bulbagarden.net/wiki/Mega_Evolution")
-
-gen6Megas <- megatest %>% 
+.gen6Megas <- .megatest %>% 
   html_nodes(xpath = ".//table[contains(@class, 'roundy')]") %>% 
   html_table(fill = T) %>% 
   .[[1]] %>% 
   .[-1, c(-2, -5)] # remove row 1 - extraneous text | remove col 2 and 5 - images
 
-gen7Megas <- megatest %>% 
+.gen7Megas <- .megatest %>% 
   html_nodes(xpath = ".//table[contains(@class, 'roundy')]") %>% 
   html_table(fill = T) %>% 
   .[[2]] %>% 
   .[-1, c(-2, -5)] # remove row 1 - extraneous text | remove col 2 and 5 - images
 
-
-megatest[1]
-
-
-
+.natdex %>% 
+  html_nodes(xpath = '//table[2]') %>% 
+  html_table(fill = T) %>% 
+  View()
+//*[@id="mw-content-text"]
+//*[@id="mw-content-text"]/table[2]
 ```
 
-The data I scraped from the website has a few things that I needed to adjust for analysis:
+The data I scraped from these websites has a few things that I needed to adjust for analysis:
 
--   The Type variable contains both a Primary and a Secondary type of a Pokemon. While some Pokemon do not have a secondary typing, we need to split the column into two columns as distinct Types.
+-   The Type variable in the Pokedex set contains both a Primary and a Secondary type of a Pokemon. While some Pokemon do not have a secondary typing, we need to split the column into two columns as distinct Types.
 
--   The columns containing different stats have special characters such as '.' and spaces, which we will need to rename. Basic tidying work, but it is simple and helps reduce future keystrokes.
+-   The columns in the Pokedex set containing different stats have special characters such as '.' and spaces, which we will need to rename. Basic tidying work, but it is simple and helps reduce future keystrokes.
 
--   The ID numbers are identical for Pokemon with multiple forms (e.g., mega-evolutions, regional variants, environmental forms). We will need to assign each Pokemon with unique ID / primary key. Note: The PokeDex number is the same regardless of form.
+-   The ID numbers in the Pokedex set are identical for Pokemon with multiple forms (e.g., mega-evolutions, regional variants, environmental forms). We will need to assign each Pokemon with unique ID / primary key. Note: The PokeDex number is the same regardless of form.
 
 -   Certain Pokemon have multiple forms, as mentioned above regarding the ID numbers, as such we need to account for distinct form (e.g., mega-evolutions, regional variants, etc.). I use basic regular expression matching to determine where in the Name string to split the columns by.
 
--   Less important, but I made *.pdex* a variable by itself in case I have to rerun the wrangling code to make any quick adjustments. This way, I won't get an error since the wrangled data gets written into a new variable.
+-   Since the Pokemon were introduced across multiple generations, I had to assign each Pokemon to their respective generations --- this was made complicated by the fact that many Pokemon have multiple forms (as previously mentioned, e.g., mega-evolutions, regional variants, etc.) so I implemented a vectorised *if_else()* statement with *dplyr*.
 
 ```{r Cleaning and Wrangling the Pokedex Dataset}
-
-# for the separation, the look-behind (?<=[a-z]) matches all lowercase ...
-# then (?=[A-Z]) is the look-ahead that matches all uppercase ...
 
 pokedex <- .pdex %>% 
   as_tibble() %>% 
@@ -93,18 +100,24 @@ pokedex <- .pdex %>%
 
 pokedex %>% 
   mutate(Generation = case_when(
+    grepl(paste(.gen6Megas[,1], collapse = "|"), Form) ~ 6,
+    grepl(paste(.gen7Megas[,1], collapse = "|"), Form) ~ 7,
     grepl("Alola", Form) ~ 7,
     grepl("Galar", Form) ~ 8,
-    
   )) %>% View()
-
-gen6Mega <- c("Venasaur", "Charizard", "Blastoise", "Alakazam", )
-gen7Mega <- c("",)
 
 pokedex[sample(nrow(pokedex), 15),]
 ```
 
-Side Note: Honestly, these functions by themselves are neither difficult nor complex by themselves, it just looks more complicated because it is chained together, making it look more complicated than it actually is. I only chained the functions together to save myself some screen space.
+Side Notes:
+
+1.  Honestly, these functions by themselves are neither difficult nor complex by themselves, it just looks more complicated because it is chained together, making it look more complicated than it actually is. I chained the functions together to save some screen space.
+
+2.  Regular expressions are confusing.
+
+3.  Regarding the *mutate()* function used to assign a Pokemon's Generation, I used the *dplyr::case_when()* and *grepl()* functions to assign the specific generation values to each Pokemon. The *case_when()* function allowed me to efficiently assign each Pokemon based on certain information, such as if it had specific forms or not.
+
+4.  The *grepl()* function seems to work only with one pattern at a time (vector of length 1), so for multiple patterns that needs matching, I used the separator, *collapse = "\|"*, to basically combine the pattern into a single *grep* pattern (i.e., "\|" acts as an "or" statement for our regular expression, so it **technically** counts as a single pattern).
 
 > Personal Comments: Figuring out the separation regular expression, *sep = "(?\<=[a-z]\|[15]0)(?=[15A-Z])"*, took a lot of trial and error --- solid 30 minutes to find something that reliably works. Typically, you would be able to separate using the regular expression (regex) used for separating *Name* and *Form*, but because of the fact that Zygarde had a *10% Forme* and a *50% Forme*, coupled with *Porygon2* being a distinct Pokemon, you can't simply just include a **[0-9]** match for the look-behind or the look-ahead. Unfortunately, this meant that I had to hard-code **\|[15]0** and **15** into the look-behind and look-ahead.
 >
