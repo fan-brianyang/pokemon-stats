@@ -35,7 +35,7 @@ pokedata <- read_csv("pokedata/pokemon.csv")
 
 Initial findings show that [PokemonDB.net](https://pokemondb.net/pokedex/all) does not have an API we can use to extract data in JSON format; one thing to note is that the the site displays a table of all the Pokemon, with important data points such as ID, name, typing, and its in-game stats. Because the website has a formatted table, the *Inspect Element* tool that most browsers have came in handy, where I was able to determine the HTML node that contains the table with the desired data.
 
-As I worked through the data cleaning and wrangling steps, I realized that I could actually compile a dataset that included more information such as which Generation a Pokemon was introduced in, and whether or not the Pokemon was a Legendary. To accomplish this, I had to scrape some more data from other websites, to which [Bulbapedia](https://bulbapedia.bulbagarden.net) came to mind first, as it was a resource that I commonly used when I play through the mainline games.
+As I worked through the data cleaning and wrangling steps, I realized that I could actually compile a 7 that included more information such as which Generation a Pokemon was introduced in, and whether or not the Pokemon was a Legendary. To accomplish this, I had to scrape some more data from other websites, to which [Bulbapedia](https://bulbapedia.bulbagarden.net) came to mind first, as it was a resource that I commonly used when I play through the mainline games.
 
 A brief description on the data I'm scraping:
 
