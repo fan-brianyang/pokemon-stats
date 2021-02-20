@@ -26,6 +26,8 @@ This R Notebook has a specific goal of being deprecated. The initial purpose was
 
 By documenting my thought process, I can eventually move all of the code (and ad-hoc explanations) into a standalone R script. This does not mean that this R Notebook will be deleted, but for simplicity sake, it is easier to run a completed R script than it is an R Notebook with multiple chunks.
 
+The R Notebook has been re-titled to be called "pre-analysis", describing that this is the code that needs to be run before any analysis begins. This includes loading in the data, additional web scraping, data consolidation, data cleaning, and data wrangling.
+
 ```{r JSON, warning=FALSE, include=F}
 
 # The response 'res' an object obtained by using the GET function on a link.
