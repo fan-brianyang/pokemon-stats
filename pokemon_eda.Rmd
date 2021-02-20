@@ -22,6 +22,10 @@ WD <- getwd()
 pokedata <- read_csv("pokedata/pokemon.csv")
 ```
 
+This R Notebook has a specific goal of being deprecated. The initial purpose was to document the process of performing exploratory data analysis on the dataset that has been collected regarding Pokemon, but I have come to realize that that is simply not realistic since the majority of the time spent so far as been web-scraping, data cleaning, and data wrangling.
+
+By documenting my thought process, I can eventually move all of the code (and ad-hoc explanations) into a standalone R script. This does not mean that this R Notebook will be deleted, but for simplicity sake, it is easier to run a completed R script than it is an R Notebook with multiple chunks.
+
 ```{r JSON, warning=FALSE, include=F}
 
 # The response 'res' an object obtained by using the GET function on a link.
